@@ -17,16 +17,12 @@ pub enum Action {
     Bet,
 }
 
-pub struct PlayerAction {
-    player_id: i32,
-    action: Action,
-}
+pub struct ActionHistory(Vec<Action>);
 
-pub type ActionHistory = Vec<PlayerAction>;
-
-struct KuhnNode {
-    info_set: String,
-    regret_sum: Vec<i64>,
+impl ActionHistory {
+    pub fn is_terminmal(&self) -> bool {
+        return false;
+    }
 }
 
 pub struct KuhnGame {
@@ -41,8 +37,44 @@ impl KuhnGame {
     pub fn new() -> Self {
         return Self {
             cards: vec![1, 2, 3],
-            action_history: Vec::new(),
+            action_history: ActionHistory(Vec::new()),
             players: Vec::new(),
         };
+    }
+
+    pub fn add_player(&mut self, mut p: Box<dyn player::Player>) {
+        assert!(self.players.len() < 2);
+        p.on_register(self.players.len() as i32);
+        self.players.push(p);
+    }
+
+    pub fn start(&mut self, total_round: usize) {
+        for _ in 0..total_round {
+            while self.action_history.is_terminmal() == false {
+                for (player_id, player) in self.players.iter_mut().enumerate() {
+                    let action = player.decide_action(&self.action_history);
+                    self.action_history.0.push(action);
+                }
+            }
+
+            // game ends, calculate payoff
+            let payoffs = self.get_payoff();
+
+            for (player_id, player) in self.players.iter_mut().enumerate() {
+                player.handle_result(&self.action_history, payoffs[player_id]);
+            }
+        }
+    }
+
+    // only 2 players
+    fn get_payoff(&self) -> Vec<i64> {
+        assert!(self.action_history.is_terminmal());
+        assert!(self.cards[0] != self.cards[1]);
+
+        if self.cards[0] > self.cards[1] {
+            return vec![1, -1];
+        }
+
+        return vec![-1, 1];
     }
 }
