@@ -37,10 +37,9 @@ pub struct KuhnGame {
     players: Vec<Box<dyn player::Player>>,
 }
 
-
 impl KuhnGame {
     pub fn new() -> Self {
-        return  Self {
+        return Self {
             cards: vec![1, 2, 3],
             action_history: Vec::new(),
             players: Vec::new(),

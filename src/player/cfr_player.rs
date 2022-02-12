@@ -1,5 +1,5 @@
-use crate::player::player;
 use crate::kuhn;
+use crate::player::player;
 
 struct CfrPlayer {
     player_id: i64,
@@ -12,7 +12,5 @@ impl player::Player for CfrPlayer {
     fn decide_action(&mut self, game_info: &kuhn::ActionHistory) -> kuhn::Action {
         return kuhn::Action::Check;
     }
-    fn handle_result(&mut self, game_info: &kuhn::ActionHistory, payoff: i64) {
-
-    }
+    fn handle_result(&mut self, game_info: &kuhn::ActionHistory, payoff: i64) {}
 }
