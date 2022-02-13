@@ -10,11 +10,29 @@
 // both players reveal their cards, and the player with the higher card takes all chips in the pot.
 
 use crate::player::player;
+use rand::{thread_rng, Rng};
+use rand::prelude::SliceRandom;
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Action {
     Check,
     Bet,
+}
+
+impl Action {
+    pub fn random() -> Self {
+        let mut rng = thread_rng();
+        // total 2 actions
+        let action_id = rng.gen_range(0..2);
+
+        let action = match action_id {
+            0 => Action::Check,
+            1 => Action::Bet,
+            _ => panic!("unknown action id {}", action_id),
+        };
+
+        return action;
+    }
 }
 
 pub struct ActionHistory(Vec<Action>);
@@ -49,7 +67,16 @@ impl KuhnGame {
     }
 
     pub fn start(&mut self, total_round: usize) {
-        for _ in 0..total_round {
+        let mut rng = thread_rng();
+        for round in 0..total_round {
+            // game starts, shuffle card
+            self.cards.shuffle(&mut rng);
+            println!("round {}, card {:?}", round, &self.cards);
+
+            for (player_id, player) in self.players.iter_mut().enumerate() {
+                player.on_start(self.cards[player_id]);
+            }
+
             while self.action_history.is_terminmal() == false {
                 for (player_id, player) in self.players.iter_mut().enumerate() {
                     let action = player.decide_action(&self.action_history);
