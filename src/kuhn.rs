@@ -10,10 +10,10 @@
 // both players reveal their cards, and the player with the higher card takes all chips in the pot.
 
 use crate::player::player;
-use rand::{thread_rng, Rng};
 use rand::prelude::SliceRandom;
+use rand::{thread_rng, Rng};
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
 pub enum Action {
     Check,
     Bet,
@@ -25,16 +25,25 @@ impl Action {
         // total 2 actions
         let action_id = rng.gen_range(0..2);
 
+        return Action::from_int(action_id);
+    }
+
+    pub fn from_int(action_id: u32) -> Self {
         let action = match action_id {
             0 => Action::Check,
             1 => Action::Bet,
             _ => panic!("unknown action id {}", action_id),
         };
-
         return action;
+    }
+
+    // 2 actions
+    pub fn num() -> usize {
+        return 2;
     }
 }
 
+#[derive(Hash, Clone, PartialEq, Eq)]
 pub struct ActionHistory(Vec<Action>);
 
 impl ActionHistory {
