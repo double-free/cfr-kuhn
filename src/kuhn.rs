@@ -46,12 +46,6 @@ impl Action {
 #[derive(Hash, Clone, PartialEq, Eq)]
 pub struct ActionHistory(Vec<Action>);
 
-impl ActionHistory {
-    pub fn is_terminmal(&self) -> bool {
-        return false;
-    }
-}
-
 pub struct KuhnGame {
     cards: Vec<i32>,
 
@@ -86,31 +80,60 @@ impl KuhnGame {
                 player.on_start(self.cards[player_id]);
             }
 
-            while self.action_history.is_terminmal() == false {
+            let mut maybePayoff = self.get_payoff();
+            while maybePayoff.is_none() {
+                // not a terminal node, go on
                 for (player_id, player) in self.players.iter_mut().enumerate() {
                     let action = player.decide_action(&self.action_history);
                     self.action_history.0.push(action);
                 }
+
+                maybePayoff = self.get_payoff();
             }
 
-            // game ends, calculate payoff
-            let payoffs = self.get_payoff();
-
+            let payoff = maybePayoff.unwrap();
+            let payoffs = vec![payoff, -payoff];
             for (player_id, player) in self.players.iter_mut().enumerate() {
                 player.handle_result(&self.action_history, payoffs[player_id]);
             }
         }
     }
 
-    // only 2 players
-    fn get_payoff(&self) -> Vec<i64> {
-        assert!(self.action_history.is_terminmal());
-        assert!(self.cards[0] != self.cards[1]);
-
-        if self.cards[0] > self.cards[1] {
-            return vec![1, -1];
+    // only 2 players, return the payoff of first player
+    // if this is not a terminal node, return None
+    fn get_payoff(&self) -> Option<i64> {
+        if self.action_history.0.len() < 2 {
+            return None;
         }
 
-        return vec![-1, 1];
+        let prevAction = self.action_history.0[self.action_history.0.len() - 1];
+        let prevPrevAction = self.action_history.0[self.action_history.0.len() - 2];
+
+        // last action is a pass
+        // pass->pass
+        // pass->bet->pass
+        // bet->pass
+        if prevAction == Action::Check {
+            if prevPrevAction == Action::Check {
+                if self.cards[0] > self.cards[1] {
+                    return Some(1);
+                }
+
+                return Some(-1);
+            }
+        }
+
+        // last action is a bet
+        // bet->bet
+        // pass->bet->bet
+        if prevAction == Action::Bet && prevPrevAction == Action::Bet {
+            if self.cards[0] > self.cards[1] {
+                return Some(2);
+            }
+            return Some(-2);
+        }
+
+        // pass->bet, not a terminal node
+        return None;
     }
 }
