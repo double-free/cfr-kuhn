@@ -2,6 +2,7 @@ use crate::kuhn;
 use crate::player::player;
 use rand::{thread_rng, Rng};
 use std::collections::HashMap;
+use std::fmt;
 
 // returns the counterfactual value
 fn cfr(
@@ -15,12 +16,13 @@ fn cfr(
 
 // every information set has a corresponding node
 
-#[derive(Hash, PartialEq, Eq)]
+#[derive(Hash, PartialEq, Eq, Debug)]
 struct InformationSet {
     action_history: kuhn::ActionHistory,
     hand_card: i32,
 }
 
+#[derive(Debug)]
 struct CfrNode {
     cum_regrets: Vec<i64>,
 }
@@ -67,7 +69,7 @@ impl CfrNode {
 pub struct CfrPlayer {
     player_id: i32,
     hand_card: i32,
-
+    money: i64,
     cfr_info: HashMap<InformationSet, CfrNode>,
 }
 
@@ -76,9 +78,16 @@ impl CfrPlayer {
         let player = CfrPlayer {
             player_id: -1,
             hand_card: -1,
+            money: 0,
             cfr_info: HashMap::new(),
         };
         return player;
+    }
+}
+
+impl fmt::Display for CfrPlayer {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "money = {}, cfr info = {:?}", self.money, self.cfr_info)
     }
 }
 
@@ -102,5 +111,15 @@ impl player::Player for CfrPlayer {
 
         return self.cfr_info.get(&info_set).unwrap().get_action();
     }
-    fn handle_result(&mut self, game_info: &kuhn::ActionHistory, payoff: i64) {}
+    fn handle_result(&mut self, action_history: &kuhn::ActionHistory, payoff: i64) {
+        self.money += payoff;
+        let info_set = InformationSet {
+            action_history: action_history.clone(),
+            hand_card: self.hand_card,
+        };
+        println!(
+            "player {} get payoff {} with info set {:?}",
+            self.player_id, payoff, info_set
+        )
+    }
 }

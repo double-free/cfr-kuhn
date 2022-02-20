@@ -1,6 +1,6 @@
 use crate::kuhn;
 
-pub trait Player {
+pub trait Player: std::fmt::Display {
     fn on_register(&mut self, player_id: i32);
     fn on_start(&mut self, card: i32);
     fn decide_action(&mut self, game_info: &kuhn::ActionHistory) -> kuhn::Action;

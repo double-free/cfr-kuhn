@@ -43,7 +43,7 @@ impl Action {
     }
 }
 
-#[derive(Hash, Clone, PartialEq, Eq)]
+#[derive(Hash, Clone, PartialEq, Eq, Debug)]
 pub struct ActionHistory(Vec<Action>);
 
 pub struct KuhnGame {
@@ -74,21 +74,26 @@ impl KuhnGame {
         for round in 0..total_round {
             // game starts, shuffle card
             self.cards.shuffle(&mut rng);
+            self.action_history.0.clear();
             println!("round {}, card {:?}", round, &self.cards);
 
             for (player_id, player) in self.players.iter_mut().enumerate() {
                 player.on_start(self.cards[player_id]);
             }
 
-            let mut maybePayoff = self.get_payoff();
+            let mut maybePayoff = get_payoff(&self.action_history, &self.cards);
             while maybePayoff.is_none() {
                 // not a terminal node, go on
                 for (player_id, player) in self.players.iter_mut().enumerate() {
                     let action = player.decide_action(&self.action_history);
                     self.action_history.0.push(action);
-                }
 
-                maybePayoff = self.get_payoff();
+                    // recalculate after change
+                    maybePayoff = get_payoff(&self.action_history, &self.cards);
+                    if maybePayoff.is_some() {
+                        break;
+                    }
+                }
             }
 
             let payoff = maybePayoff.unwrap();
@@ -97,43 +102,52 @@ impl KuhnGame {
                 player.handle_result(&self.action_history, payoffs[player_id]);
             }
         }
+
+        for (player_id, player) in self.players.iter().enumerate() {
+            println!("player {}: {}", player_id, player.to_string());
+        }
     }
+}
 
-    // only 2 players, return the payoff of first player
-    // if this is not a terminal node, return None
-    fn get_payoff(&self) -> Option<i64> {
-        if self.action_history.0.len() < 2 {
-            return None;
-        }
-
-        let prevAction = self.action_history.0[self.action_history.0.len() - 1];
-        let prevPrevAction = self.action_history.0[self.action_history.0.len() - 2];
-
-        // last action is a pass
-        // pass->pass
-        // pass->bet->pass
-        // bet->pass
-        if prevAction == Action::Check {
-            if prevPrevAction == Action::Check {
-                if self.cards[0] > self.cards[1] {
-                    return Some(1);
-                }
-
-                return Some(-1);
-            }
-        }
-
-        // last action is a bet
-        // bet->bet
-        // pass->bet->bet
-        if prevAction == Action::Bet && prevPrevAction == Action::Bet {
-            if self.cards[0] > self.cards[1] {
-                return Some(2);
-            }
-            return Some(-2);
-        }
-
-        // pass->bet, not a terminal node
+// only 2 players, return the payoff of first player
+// if this is not a terminal node, return None
+pub fn get_payoff(action_history: &ActionHistory, cards: &Vec<i32>) -> Option<i64> {
+    if action_history.0.len() < 2 {
         return None;
     }
+
+    let prevAction = action_history.0[action_history.0.len() - 1];
+    let prevPrevAction = action_history.0[action_history.0.len() - 2];
+
+    // last action is a pass
+    // pass->pass
+    // pass->bet->pass
+    // bet->pass
+    if prevAction == Action::Check {
+        if prevPrevAction == Action::Check {
+            if cards[0] > cards[1] {
+                return Some(1);
+            }
+            return Some(-1);
+        }
+        // the bet player
+        let bet_player_id = action_history.0.len() % 2;
+        if bet_player_id == 0 {
+            return Some(1);
+        }
+        return Some(-1);
+    }
+
+    // last action is a bet
+    // bet->bet
+    // pass->bet->bet
+    if prevAction == Action::Bet && prevPrevAction == Action::Bet {
+        if cards[0] > cards[1] {
+            return Some(2);
+        }
+        return Some(-2);
+    }
+
+    // pass->bet, not a terminal node
+    return None;
 }
