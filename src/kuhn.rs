@@ -44,7 +44,13 @@ impl Action {
 }
 
 #[derive(Hash, Clone, PartialEq, Eq, Debug)]
-pub struct ActionHistory(Vec<Action>);
+pub struct ActionHistory(pub Vec<Action>);
+
+impl ActionHistory {
+    pub fn new(raw: Vec<Action>) -> Self {
+        return Self(raw);
+    }
+}
 
 pub struct KuhnGame {
     cards: Vec<i32>,
@@ -81,22 +87,22 @@ impl KuhnGame {
                 player.on_start(self.cards[player_id]);
             }
 
-            let mut maybePayoff = get_payoff(&self.action_history, &self.cards);
-            while maybePayoff.is_none() {
+            let mut maybe_payoff = get_payoff(&self.action_history, &self.cards);
+            while maybe_payoff.is_none() {
                 // not a terminal node, go on
-                for (player_id, player) in self.players.iter_mut().enumerate() {
+                for player in self.players.iter_mut() {
                     let action = player.decide_action(&self.action_history);
                     self.action_history.0.push(action);
 
                     // recalculate after change
-                    maybePayoff = get_payoff(&self.action_history, &self.cards);
-                    if maybePayoff.is_some() {
+                    maybe_payoff = get_payoff(&self.action_history, &self.cards);
+                    if maybe_payoff.is_some() {
                         break;
                     }
                 }
             }
 
-            let payoff = maybePayoff.unwrap();
+            let payoff = maybe_payoff.unwrap();
             let payoffs = vec![payoff, -payoff];
             for (player_id, player) in self.players.iter_mut().enumerate() {
                 player.handle_result(&self.action_history, payoffs[player_id]);
@@ -116,15 +122,15 @@ pub fn get_payoff(action_history: &ActionHistory, cards: &Vec<i32>) -> Option<i6
         return None;
     }
 
-    let prevAction = action_history.0[action_history.0.len() - 1];
-    let prevPrevAction = action_history.0[action_history.0.len() - 2];
+    let prev_action = action_history.0[action_history.0.len() - 1];
+    let prev_prev_action = action_history.0[action_history.0.len() - 2];
 
     // last action is a pass
     // pass->pass
     // pass->bet->pass
     // bet->pass
-    if prevAction == Action::Check {
-        if prevPrevAction == Action::Check {
+    if prev_action == Action::Check {
+        if prev_prev_action == Action::Check {
             if cards[0] > cards[1] {
                 return Some(1);
             }
@@ -141,7 +147,7 @@ pub fn get_payoff(action_history: &ActionHistory, cards: &Vec<i32>) -> Option<i6
     // last action is a bet
     // bet->bet
     // pass->bet->bet
-    if prevAction == Action::Bet && prevPrevAction == Action::Bet {
+    if prev_action == Action::Bet && prev_prev_action == Action::Bet {
         if cards[0] > cards[1] {
             return Some(2);
         }
