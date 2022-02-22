@@ -16,13 +16,17 @@ struct InformationSet {
 
 #[derive(Debug)]
 struct CfrNode {
+    // this is used while training to get action
     cum_regrets: Vec<f64>,
+    // this is the final output, it converges to Nash Equilibrium
+    cum_strategy: Vec<f64>,
 }
 
 impl CfrNode {
     pub fn new() -> Self {
         let node = CfrNode {
             cum_regrets: vec![0.0; kuhn::Action::num()],
+            cum_strategy: vec![0.0; kuhn::Action::num()],
         };
         return node;
     }
@@ -60,7 +64,9 @@ impl CfrNode {
     pub fn get_action_probability(&self) -> Vec<f64> {
         let mut regret_sum = 0.0;
         for regret in self.cum_regrets.iter() {
-            regret_sum += regret;
+            if *regret > 0.0 {
+                regret_sum += regret;
+            }
         }
 
         let mut result = vec![1.0 / kuhn::Action::num() as f64; kuhn::Action::num()];
@@ -69,7 +75,11 @@ impl CfrNode {
         }
 
         for i in 0..kuhn::Action::num() {
-            result[i] = self.cum_regrets[i] / regret_sum;
+            if self.cum_regrets[i] > 0.0 {
+                result[i] = self.cum_regrets[i] / regret_sum;
+            } else {
+                result[i] = 0.0;
+            }
         }
 
         return result;
@@ -138,26 +148,31 @@ impl CfrPlayer {
     // play with self to reach Nash Equilibrium
     pub fn train(&mut self, iteration: usize) {
         let mut rng = thread_rng();
+        let mut total_payoff = 0.0;
         for round in 0..iteration {
             let mut cards = vec![1, 2, 3];
             let action_history = kuhn::ActionHistory::new(Vec::new());
             // game starts, shuffle card
             cards.shuffle(&mut rng);
-
-            println!("round {}, card {:?}", round, &cards);
-
-            let mut history_probs = HashMap::from([(0, 1.0), (1, 1.0)]);
-            self.cfr(action_history, &cards, &mut history_probs);
+            let history_probs = HashMap::from([(0, 1.0), (1, 1.0)]);
+            total_payoff += self.cfr(action_history, &cards, history_probs);
         }
+
+        println!(
+            "round {}, average payoff {}",
+            iteration,
+            total_payoff / iteration as f64
+        );
     }
 
     fn cfr(
         &mut self,
         history: kuhn::ActionHistory,
         cards: &Vec<i32>,
-        history_probs: &mut HashMap<i32, f64>,
+        reach_probs: HashMap<i32, f64>,
     ) -> f64 {
-        let player_id = history.0.len() % 2;
+        // current active player
+        let player_id = (history.0.len() % 2) as i32;
 
         let maybe_payoff = kuhn::get_payoff(&history, cards);
         if maybe_payoff.is_some() {
@@ -184,29 +199,38 @@ impl CfrPlayer {
             .get(&info_set)
             .unwrap()
             .get_action_probability();
+
         let mut action_payoffs = Vec::new();
-        let mut node_payoff = 0.0;
-        for (action_id, prob) in action_probs.iter().enumerate() {
+        let mut node_value = 0.0;
+        for (action_id, action_prob) in action_probs.iter().enumerate() {
             // next history, appending the new action to it
             let mut next_history = history.clone();
             next_history
                 .0
                 .push(kuhn::Action::from_int(action_id as u32));
             // update history probability
-            *history_probs.get_mut(&(player_id as i32)).unwrap() *= prob;
+            let mut next_reach_probs = reach_probs.clone();
+            *next_reach_probs.get_mut(&player_id).unwrap() *= action_prob;
 
             // recursive call, "-" here because the return value is the opponent's payoff
-            action_payoffs.push(-self.cfr(next_history, cards, history_probs));
-            node_payoff += action_payoffs[action_id];
+            action_payoffs.push(-self.cfr(next_history, cards, next_reach_probs));
+            node_value += action_prob * action_payoffs[action_id];
         }
+
+        assert_eq!(action_payoffs.len(), 2);
 
         // update regret
         let node = self.cfr_info.get_mut(&info_set).unwrap();
         for (action_id, payoff) in action_payoffs.iter().enumerate() {
-            let regret = payoff - node_payoff;
-            node.cum_regrets[action_id] += action_probs[action_id] * regret;
+            let regret = payoff - node_value;
+            let opponent = 1 - player_id;
+            node.cum_regrets[action_id] += reach_probs[&opponent] * regret;
         }
 
-        return node_payoff;
+        for (action_id, action_prob) in action_probs.iter().enumerate() {
+            node.cum_strategy[action_id] += reach_probs[&player_id] * action_prob;
+        }
+
+        return node_value;
     }
 }
