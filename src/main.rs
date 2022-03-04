@@ -10,6 +10,6 @@ fn main() {
     // game.start(1000);
 
     let mut nash_equilibrium_player = player::cfr_player::CfrPlayer::new();
-    nash_equilibrium_player.train(1000);
+    nash_equilibrium_player.train(100000);
     println!("player info: {}", nash_equilibrium_player);
 }

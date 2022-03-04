@@ -14,6 +14,12 @@ struct InformationSet {
     hand_card: i32,
 }
 
+impl fmt::Display for InformationSet {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}{:?}", self.hand_card, self.action_history.0)
+    }
+}
+
 #[derive(Debug)]
 struct CfrNode {
     // this is used while training to get action
@@ -86,6 +92,14 @@ impl CfrNode {
     }
 }
 
+impl fmt::Display for CfrNode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let check_ratio = self.cum_strategy[0] / (self.cum_strategy[0] + self.cum_strategy[1]);
+        let bet_ratio = 1.0 - check_ratio;
+        write!(f, "[Check: {}, Bet: {}]", check_ratio, bet_ratio)
+    }
+}
+
 pub struct CfrPlayer {
     player_id: i32,
     hand_card: i32,
@@ -107,7 +121,11 @@ impl CfrPlayer {
 
 impl fmt::Display for CfrPlayer {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "money = {}, cfr info = {:?}", self.money, self.cfr_info)
+        let mut ok = writeln!(f, "money = {}, cfr info = ", self.money);
+        for (info_set, node) in self.cfr_info.iter() {
+            ok = writeln!(f, "    {} - {}", info_set, node);
+        }
+        return ok;
     }
 }
 
