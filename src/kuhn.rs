@@ -28,7 +28,7 @@ impl Action {
         return Action::from_int(action_id);
     }
 
-    pub fn from_int(action_id: u32) -> Self {
+    pub fn from_int(action_id: usize) -> Self {
         let action = match action_id {
             0 => Action::Check,
             1 => Action::Bet,

@@ -26,13 +26,32 @@ struct CfrNode {
     cum_regrets: Vec<f64>,
     // this is the final output, it converges to Nash Equilibrium
     cum_strategy: Vec<f64>,
+    // epsilon is the probability to "explore" actions
+    epsilon: f64,
+}
+
+fn sample(probs: &Vec<f64>) -> usize {
+    let mut rng = thread_rng();
+    let thresh: f64 = rng.gen_range(0.0..1.0);
+    let mut result: usize = 0;
+    let mut cum = 0.0;
+    for (i, prob) in probs.iter().enumerate() {
+        cum += prob;
+        if cum > thresh {
+            result = i;
+            break;
+        }
+    }
+
+    return result;
 }
 
 impl CfrNode {
-    pub fn new() -> Self {
+    pub fn new(epsilon: f64) -> Self {
         let node = CfrNode {
             cum_regrets: vec![0.0; kuhn::Action::num()],
             cum_strategy: vec![0.0; kuhn::Action::num()],
+            epsilon: epsilon,
         };
         return node;
     }
@@ -60,7 +79,7 @@ impl CfrNode {
 
             s += *regret as i64;
             if s > n {
-                return kuhn::Action::from_int(i as u32);
+                return kuhn::Action::from_int(i);
             }
         }
 
@@ -86,6 +105,12 @@ impl CfrNode {
             } else {
                 result[i] = 0.0;
             }
+        }
+
+        // explore other actions with probability = epsilon
+        for prob in result.iter_mut() {
+            let explore_prob = self.epsilon / (kuhn::Action::num() as f64);
+            *prob = explore_prob + (*prob) * (1.0 - self.epsilon);
         }
 
         return result;
@@ -143,7 +168,7 @@ impl player::Player for CfrPlayer {
             hand_card: self.hand_card,
         };
         if self.cfr_info.contains_key(&info_set) == false {
-            self.cfr_info.insert(info_set, CfrNode::new());
+            self.cfr_info.insert(info_set, CfrNode::new(0.0));
             return kuhn::Action::random();
         }
 
@@ -209,7 +234,7 @@ impl CfrPlayer {
         };
 
         if self.cfr_info.contains_key(&info_set) == false {
-            self.cfr_info.insert(info_set.clone(), CfrNode::new());
+            self.cfr_info.insert(info_set.clone(), CfrNode::new(0.0));
         }
 
         let action_probs = self
@@ -223,9 +248,7 @@ impl CfrPlayer {
         for (action_id, action_prob) in action_probs.iter().enumerate() {
             // next history, appending the new action to it
             let mut next_history = history.clone();
-            next_history
-                .0
-                .push(kuhn::Action::from_int(action_id as u32));
+            next_history.0.push(kuhn::Action::from_int(action_id));
             // update history probability
             let mut next_reach_probs = reach_probs.clone();
             *next_reach_probs.get_mut(&player_id).unwrap() *= action_prob;
@@ -250,5 +273,72 @@ impl CfrPlayer {
         }
 
         return node_value;
+    }
+
+    fn mccfr(
+        &mut self,
+        history: kuhn::ActionHistory,
+        cards: &Vec<i32>,
+        reach_probs: HashMap<i32, f64>,
+    ) -> f64 {
+        // current active player
+        let player_id = (history.0.len() % 2) as i32;
+
+        let maybe_payoff = kuhn::get_payoff(&history, cards);
+        if maybe_payoff.is_some() {
+            let payoff = match player_id {
+                0 => maybe_payoff.unwrap(),
+                1 => -maybe_payoff.unwrap(),
+                _ => panic!("unexpected player id {}", player_id),
+            };
+            return payoff as f64;
+        }
+
+        // not the terminal node
+        let info_set = InformationSet {
+            action_history: history.clone(),
+            hand_card: cards[player_id as usize],
+        };
+
+        if self.cfr_info.contains_key(&info_set) == false {
+            self.cfr_info.insert(info_set.clone(), CfrNode::new(0.1));
+        }
+
+        let action_probs = self
+            .cfr_info
+            .get(&info_set)
+            .unwrap()
+            .get_action_probability();
+
+        let chosen_action_id = sample(&action_probs);
+        let chosen_action = kuhn::Action::from_int(chosen_action_id);
+        let mut next_history = history.clone();
+        next_history.0.push(chosen_action);
+        // modify reach prob for SELF (not opponent)
+        // update history probability
+        let mut next_reach_probs = reach_probs.clone();
+        *next_reach_probs.get_mut(&player_id).unwrap() *= action_probs[chosen_action_id as usize];
+        // recursive call
+        let action_payoff = self.mccfr(next_history, cards, next_reach_probs);
+
+        // update regret value
+        let node = self.cfr_info.get_mut(&info_set).unwrap();
+        for (action_id, action_prob) in action_probs.iter().enumerate() {
+            let action = kuhn::Action::from_int(action_id);
+            // reach probability of SELF (not opponent)
+            let weight = action_payoff * reach_probs.get(&player_id).unwrap();
+            if action == chosen_action {
+                node.cum_regrets[action_id] += weight * (1.0 - action_prob);
+            } else {
+                node.cum_regrets[action_id] += -weight * action_prob;
+            }
+        }
+
+        // update strategy
+        for (action_id, action_prob) in action_probs.iter().enumerate() {
+            node.cum_strategy[action_id] += action_prob / reach_probs[&player_id];
+        }
+
+        return action_payoff;
     }
 }
