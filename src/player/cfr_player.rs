@@ -150,6 +150,10 @@ impl fmt::Display for CfrPlayer {
         for (info_set, node) in self.cfr_info.iter() {
             ok = writeln!(f, "    {} - {}", info_set, node);
         }
+        ok = writeln!(f, "details:");
+        for (info_set, node) in self.cfr_info.iter() {
+            ok = writeln!(f, "    {} - {:?}", info_set, node);
+        }
         return ok;
     }
 }
@@ -198,7 +202,7 @@ impl CfrPlayer {
             // game starts, shuffle card
             cards.shuffle(&mut rng);
             let history_probs = HashMap::from([(0, 1.0), (1, 1.0)]);
-            total_payoff += self.cfr(action_history, &cards, history_probs);
+            total_payoff += self.mccfr(action_history, &cards, history_probs);
         }
 
         println!(
@@ -283,6 +287,7 @@ impl CfrPlayer {
     ) -> f64 {
         // current active player
         let player_id = (history.0.len() % 2) as i32;
+        let opponent_id = 1 - player_id;
 
         let maybe_payoff = kuhn::get_payoff(&history, cards);
         if maybe_payoff.is_some() {
@@ -312,21 +317,22 @@ impl CfrPlayer {
 
         let chosen_action_id = sample(&action_probs);
         let chosen_action = kuhn::Action::from_int(chosen_action_id);
+        let chosen_action_prob = action_probs[chosen_action_id as usize];
         let mut next_history = history.clone();
         next_history.0.push(chosen_action);
         // modify reach prob for SELF (not opponent)
         // update history probability
         let mut next_reach_probs = reach_probs.clone();
-        *next_reach_probs.get_mut(&player_id).unwrap() *= action_probs[chosen_action_id as usize];
+        *next_reach_probs.get_mut(&player_id).unwrap() *= chosen_action_prob;
         // recursive call
-        let action_payoff = self.mccfr(next_history, cards, next_reach_probs);
+        let expected_value = -self.mccfr(next_history, cards, next_reach_probs);
 
         // update regret value
         let node = self.cfr_info.get_mut(&info_set).unwrap();
         for (action_id, action_prob) in action_probs.iter().enumerate() {
             let action = kuhn::Action::from_int(action_id);
             // reach probability of SELF (not opponent)
-            let weight = action_payoff * reach_probs.get(&player_id).unwrap();
+            let weight = expected_value / reach_probs[&player_id];
             if action == chosen_action {
                 node.cum_regrets[action_id] += weight * (1.0 - action_prob);
             } else {
@@ -339,6 +345,6 @@ impl CfrPlayer {
             node.cum_strategy[action_id] += action_prob / reach_probs[&player_id];
         }
 
-        return action_payoff;
+        return expected_value * chosen_action_prob;
     }
 }
