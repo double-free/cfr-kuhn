@@ -306,7 +306,7 @@ impl CfrPlayer {
         };
 
         if self.cfr_info.contains_key(&info_set) == false {
-            self.cfr_info.insert(info_set.clone(), CfrNode::new(0.1));
+            self.cfr_info.insert(info_set.clone(), CfrNode::new(0.06));
         }
 
         let action_probs = self
@@ -325,6 +325,7 @@ impl CfrPlayer {
         let mut next_reach_probs = reach_probs.clone();
         *next_reach_probs.get_mut(&player_id).unwrap() *= chosen_action_prob;
         // recursive call
+        // expected value if choose this action with 100% probability
         let expected_value = -self.mccfr(next_history, cards, next_reach_probs);
 
         // update regret value
@@ -332,7 +333,7 @@ impl CfrPlayer {
         for (action_id, action_prob) in action_probs.iter().enumerate() {
             let action = kuhn::Action::from_int(action_id);
             // reach probability of SELF (not opponent)
-            let weight = expected_value / reach_probs[&player_id];
+            let weight = expected_value / reach_probs[&player_id] / action_prob;
             if action == chosen_action {
                 node.cum_regrets[action_id] += weight * (1.0 - action_prob);
             } else {
@@ -342,9 +343,9 @@ impl CfrPlayer {
 
         // update strategy
         for (action_id, action_prob) in action_probs.iter().enumerate() {
-            node.cum_strategy[action_id] += action_prob / reach_probs[&player_id];
+            node.cum_strategy[action_id] += action_prob * reach_probs[&player_id];
         }
 
-        return expected_value * chosen_action_prob;
+        return expected_value;
     }
 }
